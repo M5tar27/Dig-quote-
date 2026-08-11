@@ -37,10 +37,20 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, type, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
+    // Buttons default to type="button" so a click handler never accidentally submits an
+    // enclosing/implicit form (Safari in particular can trigger native form validation —
+    // e.g. "The string did not match the expected pattern" — before onClick even runs,
+    // silently swallowing the intended action). Callers that DO want a submit button
+    // (e.g. a form's save button) still get it by passing type="submit" explicitly.
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        type={asChild ? type : type ?? "button"}
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
     );
   }
 );
