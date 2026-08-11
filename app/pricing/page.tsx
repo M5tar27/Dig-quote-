@@ -21,7 +21,7 @@ export default async function PricingPage({
 }) {
   const { user, company } = await getCompanyContext();
   const trialActive = company?.subscription_status === "trialing";
-  const hasActiveSub = company?.subscription_status === "active" || company?.subscription_status === "trialing";
+  const isActiveSub = company?.subscription_status === "active";
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-secondary/40 px-4 py-12">
@@ -55,7 +55,7 @@ export default async function PricingPage({
               </Link>
             )}
 
-            {user && company && !hasActiveSub && <CheckoutButton />}
+            {user && company && !isActiveSub && <CheckoutButton />}
 
             {user && company && trialActive && (
               <p className="text-center text-sm text-muted-foreground">
@@ -63,7 +63,7 @@ export default async function PricingPage({
               </p>
             )}
 
-            {user && company && company.subscription_status === "active" && (
+            {user && company && isActiveSub && (
               <p className="text-center text-sm font-medium text-success">
                 You're subscribed — thanks for being a DigQuote customer!
               </p>
