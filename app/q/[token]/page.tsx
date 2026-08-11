@@ -7,6 +7,10 @@ import { ApproveQuoteButton } from "@/components/approve-quote-button";
 import { AlertTriangle, Award, Download } from "lucide-react";
 import type { Certification } from "@/lib/types";
 
+// Status here changes when a client approves the quote, and photos/pricing can be
+// edited by the contractor right up until then — always fetch fresh.
+export const dynamic = "force-dynamic";
+
 interface PublicQuote {
   id: string;
   public_token: string;

@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 import { CheckoutButton } from "@/components/checkout-button";
 import { Check } from "lucide-react";
 
+// This page's content depends on the visitor's auth/subscription state, so it must
+// never be cached — otherwise one visitor's rendered HTML (e.g. a logged-out view)
+// can get served to a different, logged-in visitor.
+export const dynamic = "force-dynamic";
+
 const FEATURES = [
   "Unlimited AI-generated quotes",
   "Branded PDF estimates",
@@ -55,7 +60,9 @@ export default async function PricingPage({
               </Link>
             )}
 
-            {user && company && !isActiveSub && <CheckoutButton />}
+            {user && company && !isActiveSub && (
+              <CheckoutButton label={trialActive ? "Subscribe now" : "Start your 14-day free trial"} />
+            )}
 
             {user && company && trialActive && (
               <p className="text-center text-sm text-muted-foreground">

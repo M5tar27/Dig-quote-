@@ -2,6 +2,11 @@ import { redirect } from "next/navigation";
 import { getCompanyContext } from "@/lib/data";
 import { Nav } from "@/components/nav";
 
+// Every page under this layout shows one company's private data (quotes, settings,
+// billing). Without this, a cached response could theoretically be served to a
+// different logged-in visitor — same class of bug as the /pricing caching issue.
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, company } = await getCompanyContext();
 
