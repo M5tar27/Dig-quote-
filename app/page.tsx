@@ -76,7 +76,10 @@ export default function LandingPage() {
             Estimates are AI-generated for convenience only. Contractor must verify all
             measurements and site conditions. DigQuote is not liable for errors.
           </p>
-          <p className="mt-2">© {new Date().getFullYear()} DigQuote.</p>
+          <p className="mt-2">
+            © {new Date().getFullYear()} DigQuote. <Link href="/privacy-policy" className="underline hover:text-foreground">Privacy Policy</Link> ·{" "}
+            <Link href="/contact" className="underline hover:text-foreground">Contact</Link>
+          </p>
         </div>
       </footer>
     </main>
