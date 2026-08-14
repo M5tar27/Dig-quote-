@@ -78,6 +78,7 @@ export default function LandingPage() {
           </p>
           <p className="mt-2">
             © {new Date().getFullYear()} DigQuote. <Link href="/privacy-policy" className="underline hover:text-foreground">Privacy Policy</Link> ·{" "}
+            <Link href="/cookie-policy" className="underline hover:text-foreground">Cookie Policy</Link> ·{" "}
             <Link href="/contact" className="underline hover:text-foreground">Contact</Link>
           </p>
         </div>
