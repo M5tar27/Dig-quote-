@@ -26,6 +26,7 @@ export function calculatePricing(estimate: AiEstimate, rates: CompanyRates): AiD
       unit: "hrs",
       unit_cost: rates.excavator_hr,
       total: excavatorLabor,
+      is_material: false,
     },
     {
       label: "Hand labor",
@@ -33,6 +34,7 @@ export function calculatePricing(estimate: AiEstimate, rates: CompanyRates): AiD
       unit: "hrs",
       unit_cost: rates.labor_hr,
       total: handworkLabor,
+      is_material: false,
     },
     {
       label: "Equipment (mini-excavator)",
@@ -40,6 +42,7 @@ export function calculatePricing(estimate: AiEstimate, rates: CompanyRates): AiD
       unit: "days",
       unit_cost: rates.equipment_day,
       total: equipmentCost,
+      is_material: false,
     },
     {
       label: "Gravel",
@@ -47,6 +50,7 @@ export function calculatePricing(estimate: AiEstimate, rates: CompanyRates): AiD
       unit: "tons",
       unit_cost: rates.gravel_ton,
       total: gravelCost,
+      is_material: true,
     },
     {
       label: "Disposal / haul-off",
@@ -54,6 +58,7 @@ export function calculatePricing(estimate: AiEstimate, rates: CompanyRates): AiD
       unit: "cu yd",
       unit_cost: rates.disposal_yard,
       total: disposalCost,
+      is_material: false,
     },
   ];
 
@@ -64,6 +69,7 @@ export function calculatePricing(estimate: AiEstimate, rates: CompanyRates): AiD
       unit: "tons",
       unit_cost: 60,
       total: round2(estimate.tons_sand_needed * 60),
+      is_material: true,
     });
   }
 
