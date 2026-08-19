@@ -6,8 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { QuoteDetailActions } from "@/components/quote-detail-actions";
 import { ManualEstimateForm } from "@/components/manual-estimate-form";
 import { QuoteLineItems } from "@/components/quote-line-items";
+import { JobMaterialsChecklist } from "@/components/job-materials-checklist";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { DEFAULT_RATES, type AiDataJson, type Quote, type QuoteStatus } from "@/lib/types";
+import { DEFAULT_RATES, type AiDataJson, type JobMaterial, type Quote, type QuoteStatus } from "@/lib/types";
 import { AlertTriangle } from "lucide-react";
 
 const STATUS_VARIANT: Record<QuoteStatus, "secondary" | "default" | "success" | "destructive"> = {
@@ -32,6 +33,18 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
 
   const ai = quote.ai_data_json as AiDataJson | null;
   const rates = { ...DEFAULT_RATES, ...(company.rates_json || {}) };
+
+  // Materials only matter once a job is actually won — no point tracking
+  // ordering/delivery/install status on a quote that might never happen.
+  let materials: JobMaterial[] = [];
+  if (quote.status === "won") {
+    const { data } = await supabase
+      .from("job_materials")
+      .select("*")
+      .eq("quote_id", quote.id)
+      .order("created_at", { ascending: true });
+    materials = (data as JobMaterial[]) || [];
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -90,6 +103,10 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
 
       {ai && ai.line_items.length > 0 && (
         <QuoteLineItems quoteId={quote.id} ai={ai} rates={rates} />
+      )}
+
+      {quote.status === "won" && (
+        <JobMaterialsChecklist quoteId={quote.id} materials={materials} />
       )}
 
       <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
