@@ -7,7 +7,7 @@ import { renderAndStoreQuotePdf } from "@/lib/generate-pdf";
 import { getCompanyContext } from "@/lib/data";
 import { recalculateFromLineItems } from "@/lib/pricing";
 import { DEFAULT_RATES } from "@/lib/types";
-import type { AiDataJson, AiLineItem, Certification, Company, CompanyRates, Quote, QuoteStatus, UserRole } from "@/lib/types";
+import type { AiDataJson, AiLineItem, Certification, Company, CompanyRates, MaterialStatus, Quote, QuoteStatus, UserRole } from "@/lib/types";
 
 export async function updateQuoteStatus(quoteId: string, status: QuoteStatus) {
   const supabase = await createClient();
@@ -187,6 +187,58 @@ export async function updateQuoteLineItems(quoteId: string, lineItems: AiLineIte
   revalidatePath("/app");
   revalidatePath(`/quotes/${quoteId}`);
   return updated;
+}
+
+export async function updateMaterialStatus(materialId: string, status: MaterialStatus) {
+  const { company } = await getCompanyContext();
+  if (!company) throw new Error("No company on file");
+
+  const supabase = await createClient();
+  const { data: material, error } = await supabase
+    .from("job_materials")
+    .update({ status })
+    .eq("id", materialId)
+    .eq("company_id", company.id) // belt-and-suspenders alongside RLS
+    .select("quote_id")
+    .single<{ quote_id: string }>();
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/quotes/${material.quote_id}`);
+}
+
+export async function addJobMaterial(
+  quoteId: string,
+  fields: { label: string; quantity: number | null; unit: string | null }
+) {
+  const { company } = await getCompanyContext();
+  if (!company) throw new Error("No company on file");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("job_materials").insert({
+    quote_id: quoteId,
+    company_id: company.id,
+    label: fields.label.trim(),
+    quantity: fields.quantity,
+    unit: fields.unit?.trim() || null,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/quotes/${quoteId}`);
+}
+
+export async function removeJobMaterial(materialId: string, quoteId: string) {
+  const { company } = await getCompanyContext();
+  if (!company) throw new Error("No company on file");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("job_materials")
+    .delete()
+    .eq("id", materialId)
+    .eq("company_id", company.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/quotes/${quoteId}`);
 }
 
 export async function updateTeamMemberRole(memberId: string, role: UserRole) {
