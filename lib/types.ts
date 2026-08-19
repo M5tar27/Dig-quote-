@@ -73,6 +73,24 @@ export interface AiLineItem {
   unit: string;
   unit_cost: number;
   total: number;
+  /** True for physical materials a crew orders/installs (gravel, sand, etc.) —
+   * false/undefined for labor, equipment, and disposal line items. Drives which
+   * items get auto-seeded into job_materials when a quote is approved. */
+  is_material?: boolean;
+}
+
+export type MaterialStatus = "needed" | "ordered" | "delivered" | "installed";
+
+export interface JobMaterial {
+  id: string;
+  quote_id: string;
+  company_id: string;
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  status: MaterialStatus;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AiEstimate {
