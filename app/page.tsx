@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PromoVideo } from "@/components/promo-video";
 import { Camera, Clock, FileCheck, ShieldCheck } from "lucide-react";
 
 export default function LandingPage() {
@@ -52,6 +53,8 @@ export default function LandingPage() {
           </p>
         </div>
       </section>
+
+      <PromoVideo />
 
       <section className="container grid gap-4 pb-16 sm:grid-cols-2 lg:grid-cols-4">
         {[
