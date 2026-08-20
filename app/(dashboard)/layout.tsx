@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCompanyContext } from "@/lib/data";
 import { Nav } from "@/components/nav";
+import { HelpPopup } from "@/components/help-popup";
 
 // Every page under this layout shows one company's private data (quotes, settings,
 // billing). Without this, a cached response could theoretically be served to a
@@ -33,6 +34,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       )}
       <div className="container py-6">{children}</div>
+      <HelpPopup />
     </div>
   );
 }
