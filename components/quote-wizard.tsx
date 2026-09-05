@@ -12,9 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
 import { PhotoUploader, type PendingPhoto } from "@/components/photo-uploader";
+import { PhoneGate } from "@/components/phone-gate";
+import { CardOnFile } from "@/components/card-on-file";
 import { compressImages } from "@/lib/image";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
-import type { CompanyRates, JobType } from "@/lib/types";
+import type { CompanyPlan, CompanyRates, JobType } from "@/lib/types";
 
 const JOB_TYPES: JobType[] = ["Patio", "Driveway", "Trench", "Grading", "Pool Dig", "Demolition", "Other"];
 
@@ -29,13 +31,23 @@ const GENERATE_STEPS = [
 const MIN_PHOTOS = 3;
 const MAX_PHOTOS = 6;
 
-export function QuoteWizard({ companyId, rates }: { companyId: string; rates: CompanyRates }) {
+export function QuoteWizard({
+  companyId,
+  rates,
+  plan,
+}: {
+  companyId: string;
+  rates: CompanyRates;
+  plan: CompanyPlan;
+}) {
   const router = useRouter();
   const supabase = createClient();
 
   const [step, setStep] = useState(1);
   const [generating, setGenerating] = useState(false);
   const [generateStepIndex, setGenerateStepIndex] = useState(0);
+  const [freeBidPhoneHash, setFreeBidPhoneHash] = useState<string | null>(null);
+  const [freeBidCardOnFile, setFreeBidCardOnFile] = useState(false);
 
   const [clientName, setClientName] = useState("");
   const [address, setAddress] = useState("");
@@ -66,6 +78,14 @@ export function QuoteWizard({ companyId, rates }: { companyId: string; rates: Co
   async function handleGenerate() {
     if (photos.length < MIN_PHOTOS) {
       toast.error(`Add at least ${MIN_PHOTOS} photos`);
+      return;
+    }
+    if (plan === "free" && !freeBidPhoneHash) {
+      toast.error("Verify your phone number first");
+      return;
+    }
+    if (plan === "free" && !freeBidCardOnFile) {
+      toast.error("Add a card on file first (not charged)");
       return;
     }
 
@@ -131,6 +151,8 @@ export function QuoteWizard({ companyId, rates }: { companyId: string; rates: Co
           job_type: jobType,
           notes,
           company_rates: rates,
+          is_free_bid: plan === "free",
+          phone_hash: freeBidPhoneHash,
         }),
       });
       setGenerateStepIndex(3);
@@ -244,7 +266,23 @@ export function QuoteWizard({ companyId, rates }: { companyId: string; rates: Co
                 We'll analyze your photos with AI, calculate materials and labor, and build a
                 priced PDF quote — usually in about 60 seconds.
               </p>
-              <Button size="lg" className="w-full" onClick={handleGenerate}>
+              {plan === "free" && (
+                <>
+                  <PhoneGate onVerified={(hash) => setFreeBidPhoneHash(hash)} />
+                  {freeBidPhoneHash && <CardOnFile onSaved={() => setFreeBidCardOnFile(true)} />}
+                  <p className="text-xs text-muted-foreground">
+                    Your first bid is free — one per phone number. It'll be watermarked and ready
+                    to view in about 5 minutes; upgrade any time to skip the wait and send it to
+                    your customer.
+                  </p>
+                </>
+              )}
+              <Button
+                size="lg"
+                className="w-full"
+                onClick={handleGenerate}
+                disabled={plan === "free" && (!freeBidPhoneHash || !freeBidCardOnFile)}
+              >
                 Generate Quote — 60sec
               </Button>
             </>

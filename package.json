@@ -12,6 +12,8 @@
   "dependencies": {
     "@hookform/resolvers": "^5.7.1",
     "@react-pdf/renderer": "^4.5.1",
+    "@stripe/react-stripe-js": "^6.9.0",
+    "@stripe/stripe-js": "^9.15.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.2",
     "class-variance-authority": "^0.7.1",
@@ -24,9 +26,11 @@
     "react-dom": "^18",
     "react-hook-form": "^7.84.0",
     "resend": "^6.18.1",
+    "sharp": "^0.35.4",
     "sonner": "^2.0.7",
     "stripe": "^22.4.0",
     "tailwind-merge": "^3.6.0",
+    "twilio": "^6.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

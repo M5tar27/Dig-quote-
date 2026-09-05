@@ -7,6 +7,7 @@ import { QuoteDetailActions } from "@/components/quote-detail-actions";
 import { ManualEstimateForm } from "@/components/manual-estimate-form";
 import { QuoteLineItems } from "@/components/quote-line-items";
 import { JobMaterialsChecklist } from "@/components/job-materials-checklist";
+import { FreeBidReveal } from "@/components/free-bid-reveal";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { DEFAULT_RATES, type AiDataJson, type JobMaterial, type Quote, type QuoteStatus } from "@/lib/types";
 import { AlertTriangle } from "lucide-react";
@@ -59,33 +60,50 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             {quote.job_type} · Created {formatDate(quote.created_at)}
           </p>
         </div>
-        <p className="text-3xl font-extrabold text-primary">{formatCurrency(quote.total || 0)}</p>
+        <p className="text-3xl font-extrabold text-primary">
+          {quote.is_free_bid && quote.free_reveal_at && new Date(quote.free_reveal_at) > new Date()
+            ? "—"
+            : formatCurrency(quote.total || 0)}
+        </p>
       </div>
+
+      {quote.is_free_bid && (
+        <div className="rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 p-3 text-center text-sm font-medium text-primary">
+          DRAFT — free bid, watermarked. Upgrade to send this to your customer.
+        </div>
+      )}
 
       <QuoteDetailActions
         quoteId={quote.id}
         status={quote.status}
         publicToken={quote.public_token}
         hasClientEmail={!!quote.client_email}
+        isFreeBid={quote.is_free_bid}
       />
 
-      {ai?.manual_mode && (
-        <ManualEstimateForm quoteId={quote.id} rates={rates} />
-      )}
+      <FreeBidReveal revealAt={quote.free_reveal_at} isFreeBid={quote.is_free_bid}>
+        {ai?.manual_mode && (
+          <ManualEstimateForm quoteId={quote.id} rates={rates} />
+        )}
 
-      {ai && !ai.manual_mode && (
-        <Card>
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">AI Confidence</CardTitle>
-            <Badge variant={ai.ai_confidence_1to10 >= 8 ? "success" : "secondary"}>
-              {ai.ai_confidence_1to10}/10
-            </Badge>
-          </CardHeader>
-          {ai.ai_notes && (
-            <CardContent className="pt-0 text-sm text-muted-foreground">{ai.ai_notes}</CardContent>
-          )}
-        </Card>
-      )}
+        {ai && !ai.manual_mode && (
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">AI Confidence</CardTitle>
+              <Badge variant={ai.ai_confidence_1to10 >= 8 ? "success" : "secondary"}>
+                {ai.ai_confidence_1to10}/10
+              </Badge>
+            </CardHeader>
+            {ai.ai_notes && (
+              <CardContent className="pt-0 text-sm text-muted-foreground">{ai.ai_notes}</CardContent>
+            )}
+          </Card>
+        )}
+
+        {ai && ai.line_items.length > 0 && (
+          <QuoteLineItems quoteId={quote.id} ai={ai} rates={rates} />
+        )}
+      </FreeBidReveal>
 
       {quote.photos_urls?.length > 0 && (
         <Card>
@@ -99,10 +117,6 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             ))}
           </CardContent>
         </Card>
-      )}
-
-      {ai && ai.line_items.length > 0 && (
-        <QuoteLineItems quoteId={quote.id} ai={ai} rates={rates} />
       )}
 
       {quote.status === "won" && (

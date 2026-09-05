@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
+import { planForStripePriceId } from "@/lib/plans";
 
 export const runtime = "nodejs";
 
@@ -57,12 +58,20 @@ export async function POST(req: Request) {
       const sub = event.data.object as Stripe.Subscription;
       const companyId = await findCompanyId(sub.customer as string, sub.metadata?.company_id);
       if (companyId) {
+        const status = mapStripeStatus(sub.status);
+        const priceId = sub.items.data[0]?.price?.id;
+        const matchedPlan = planForStripePriceId(priceId);
         await supabase
           .from("companies")
           .update({
             stripe_subscription_id: sub.id,
             stripe_customer_id: sub.customer as string,
-            subscription_status: mapStripeStatus(sub.status),
+            subscription_status: status,
+            // Only move off 'free' on a status that actually means "paying" — a price
+            // we don't recognize, or a non-active status, leaves `plan` untouched
+            // rather than silently downgrading/upgrading based on a guess.
+            ...(status === "active" && matchedPlan ? { plan: matchedPlan } : {}),
+            ...(status === "canceled" ? { plan: "free" } : {}),
           })
           .eq("id", companyId);
       }
@@ -72,7 +81,7 @@ export async function POST(req: Request) {
       const sub = event.data.object as Stripe.Subscription;
       const companyId = await findCompanyId(sub.customer as string, sub.metadata?.company_id);
       if (companyId) {
-        await supabase.from("companies").update({ subscription_status: "canceled" }).eq("id", companyId);
+        await supabase.from("companies").update({ subscription_status: "canceled", plan: "free" }).eq("id", companyId);
       }
       break;
     }

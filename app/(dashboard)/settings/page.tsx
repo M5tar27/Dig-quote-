@@ -9,6 +9,8 @@ import { CompanyForm } from "@/components/settings/company-form";
 import { CertificationsForm } from "@/components/settings/certifications-form";
 import { PricingForm } from "@/components/settings/pricing-form";
 import { TeamPanel } from "@/components/settings/team-panel";
+import { ManageBillingButton } from "@/components/manage-billing-button";
+import { PLAN_LIMITS } from "@/lib/plans";
 import { DEFAULT_RATES, type Profile } from "@/lib/types";
 
 export default async function SettingsPage() {
@@ -48,7 +50,7 @@ export default async function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="team">
-          <TeamPanel members={(members as Profile[]) || []} isAdmin={isAdmin} currentUserId={user.id} />
+          <TeamPanel members={(members as Profile[]) || []} isAdmin={isAdmin} currentUserId={user.id} plan={company.plan} />
         </TabsContent>
 
         {isAdmin && (
@@ -61,16 +63,32 @@ export default async function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div>
-                    <p className="font-medium">Plan</p>
-                    <p className="text-sm text-muted-foreground">$99/mo unlimited quotes</p>
+                    <p className="font-medium">{PLAN_LIMITS[company.plan].label} plan</p>
+                    <p className="text-sm text-muted-foreground">
+                      {company.plan === "free"
+                        ? "1 free bid, one per business"
+                        : `$${PLAN_LIMITS[company.plan].priceMonthly}/mo — ${
+                            PLAN_LIMITS[company.plan].bidsPerMonth === null
+                              ? "unlimited bids"
+                              : `${PLAN_LIMITS[company.plan].bidsPerMonth} bids/mo`
+                          }`}
+                    </p>
                   </div>
-                  <Badge variant={company.subscription_status === "active" ? "success" : "secondary"} className="capitalize">
-                    {company.subscription_status}
-                  </Badge>
+                  {company.plan === "free" ? (
+                    <Badge variant="secondary">Free</Badge>
+                  ) : (
+                    <Badge variant={company.subscription_status === "active" ? "success" : "secondary"} className="capitalize">
+                      {company.subscription_status}
+                    </Badge>
+                  )}
                 </div>
-                <Link href="/pricing">
-                  <Button size="lg">Manage subscription</Button>
-                </Link>
+                {company.plan === "free" ? (
+                  <Link href="/pricing">
+                    <Button size="lg">See plans</Button>
+                  </Link>
+                ) : (
+                  <ManageBillingButton />
+                )}
               </CardContent>
             </Card>
           </TabsContent>

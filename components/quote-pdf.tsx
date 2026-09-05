@@ -43,6 +43,18 @@ const styles = StyleSheet.create({
   grandTotalValue: { fontSize: 16, fontWeight: 700, color: "#ea580c" },
   banner: { marginTop: 14, padding: 8, backgroundColor: "#fff7ed", borderRadius: 4, fontSize: 9 },
   footer: { position: "absolute", bottom: 24, left: 36, right: 36, fontSize: 7.5, color: "#888", textAlign: "center" },
+  watermarkCorner: { position: "absolute", top: 20, right: 36, fontSize: 9, fontWeight: 700, color: "#dc2626" },
+  freeBidBanner: {
+    marginTop: 10,
+    padding: 8,
+    borderWidth: 1.5,
+    borderColor: "#dc2626",
+    borderRadius: 4,
+    fontSize: 9,
+    fontWeight: 700,
+    color: "#dc2626",
+    textAlign: "center",
+  },
 });
 
 function money(n: number | null | undefined) {
@@ -59,6 +71,7 @@ export function QuotePdf({ quote, company }: { quote: Quote; company: Company })
   return (
     <Document>
       <Page size="LETTER" style={styles.page}>
+        {quote.is_free_bid ? <Text style={styles.watermarkCorner}>DRAFT</Text> : null}
         <View style={styles.headerRow}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             {company.logo_url ? <Image src={company.logo_url} style={styles.logo} /> : null}
@@ -151,6 +164,12 @@ export function QuotePdf({ quote, company }: { quote: Quote; company: Company })
             AI-Generated Estimate — Verify all measurements before starting work.
           </Text>
         </View>
+
+        {quote.is_free_bid ? (
+          <View style={styles.freeBidBanner}>
+            <Text>DRAFT — Made with DigQuote — Upgrade to send to your customer</Text>
+          </View>
+        ) : null}
 
         {company.default_terms ? (
           <View style={{ marginTop: 10 }}>

@@ -35,6 +35,15 @@ exception
   when duplicate_object then null;
 end $$;
 
+-- Free-bid relaunch: replaces the old single $99/mo + 14-day-trial model with
+-- Free (lifetime 1 bid, phone-verified) / Starter ($49/mo, 30 bids) / Pro ($149/mo,
+-- unlimited + crew seats). See lib/plans.ts for the limits matrix.
+do $$ begin
+  create type company_plan as enum ('free', 'starter', 'pro');
+exception
+  when duplicate_object then null;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------
@@ -48,8 +57,14 @@ create table if not exists companies (
   default_terms text default 'Estimate valid for 30 days. 50% deposit due at scheduling, balance due on completion.',
   stripe_customer_id text,
   stripe_subscription_id text,
-  subscription_status subscription_status not null default 'trialing',
-  trial_ends_at timestamptz not null default (now() + interval '14 days'),
+  subscription_status subscription_status not null default 'none',
+  trial_ends_at timestamptz,
+  plan company_plan not null default 'free',
+  -- Required before /api/estimate will generate a free bid. Collected via a Stripe
+  -- SetupIntent (lib: app/api/stripe/setup-intent) — a card on file is most of what
+  -- deters casual free-tier abuse, but it is never auto-charged without the customer
+  -- explicitly confirming a Starter/Pro checkout afterwards.
+  free_bid_card_on_file boolean not null default false,
   rates_json jsonb not null default '{
     "excavator_hr": 125,
     "labor_hr": 55,
@@ -68,6 +83,17 @@ create table if not exists companies (
 
 -- Backfill for pre-existing rows if this migration runs after companies already exist.
 alter table companies add column if not exists certifications jsonb not null default '[]'::jsonb;
+
+-- Free-bid relaunch migration: kills the 14-day trial in favor of a permanent
+-- one-bid Free plan (see lib/plans.ts). Safe to run repeatedly and safe on a table
+-- that already has rows — trial_ends_at becomes optional rather than being dropped,
+-- so nothing breaks if any historical row still has a value in it.
+alter table companies add column if not exists plan company_plan not null default 'free';
+alter table companies add column if not exists free_bid_card_on_file boolean not null default false;
+alter table companies alter column trial_ends_at drop not null;
+alter table companies alter column trial_ends_at drop default;
+alter table companies alter column subscription_status set default 'none';
+update companies set plan = 'free', subscription_status = 'none' where subscription_status = 'trialing';
 
 create table if not exists profiles (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -94,9 +120,16 @@ create table if not exists quotes (
   total numeric(10, 2),
   pdf_url text,
   public_token text not null default encode(gen_random_bytes(16), 'hex'),
+  -- Free-bid relaunch: a free bid is watermarked, held behind a reveal delay, and
+  -- can't be sent to a client (see app/api/estimate, components/free-bid-reveal.tsx).
+  is_free_bid boolean not null default false,
+  free_reveal_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table quotes add column if not exists is_free_bid boolean not null default false;
+alter table quotes add column if not exists free_reveal_at timestamptz;
 
 create unique index if not exists quotes_public_token_idx on quotes (public_token);
 create index if not exists quotes_company_id_idx on quotes (company_id);
@@ -114,6 +147,46 @@ create table if not exists api_usage_events (
   endpoint text not null,
   created_at timestamptz not null default now()
 );
+
+-- ---------------------------------------------------------------------------
+-- Free-bid anti-abuse: phone verification + image-hash dedup.
+-- Deliberately NOT scoped by company_id and have NO RLS policies (RLS is enabled
+-- with zero policies, so only the service-role client can touch them) — the whole
+-- point is catching abuse across different accounts/companies, which a per-company
+-- policy would defeat.
+-- ---------------------------------------------------------------------------
+create table if not exists verified_phones (
+  id uuid primary key default gen_random_uuid(),
+  -- HMAC-SHA256 of the E.164 phone number (see lib/phone.ts's hashPhone, keyed by
+  -- PHONE_HASH_SECRET) rather than a bare hash — plain E.164 numbers are low enough
+  -- entropy that an unsalted/unkeyed hash is effectively reversible by anyone with
+  -- database access.
+  phone_hash text not null,
+  is_voip boolean not null default false,
+  ip text,
+  device_fingerprint text,
+  free_bid_used boolean not null default false,
+  free_bid_quote_id uuid references quotes (id) on delete set null,
+  verified_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists verified_phones_phone_hash_idx on verified_phones (phone_hash);
+alter table verified_phones enable row level security;
+
+create table if not exists photo_hashes (
+  id uuid primary key default gen_random_uuid(),
+  -- dHash (perceptual hash) of an uploaded job photo — see lib/phash.ts. Used to
+  -- block the same photos being reused across a different phone/company within
+  -- PHASH_LOOKBACK_DAYS, a common free-tier abuse pattern.
+  phash text not null,
+  quote_id uuid references quotes (id) on delete cascade,
+  company_id uuid references companies (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists photo_hashes_phash_idx on photo_hashes (phash);
+alter table photo_hashes enable row level security;
 
 create index if not exists api_usage_events_lookup_idx on api_usage_events (company_id, endpoint, created_at);
 
@@ -259,6 +332,13 @@ create policy "quotes_bucket_company_delete" on storage.objects
 -- its exact unguessable token — it can't enumerate or bulk-select every quote.
 -- Excludes internal fields (created_by, company owner info, etc).
 -- ---------------------------------------------------------------------------
+-- The live function's return row (OUT params) predates the company_certifications
+-- column and can't be changed via CREATE OR REPLACE — drop it first. The
+-- companies.certifications column is added above (add column if not exists),
+-- earlier in this same script, so it exists by the time this recreates the
+-- function.
+drop function if exists get_public_quote(text);
+
 create or replace function get_public_quote(p_token text)
 returns table (
   id uuid,

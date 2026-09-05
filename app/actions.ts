@@ -6,6 +6,7 @@ import { resend, quoteEmailHtml } from "@/lib/resend";
 import { renderAndStoreQuotePdf } from "@/lib/generate-pdf";
 import { getCompanyContext } from "@/lib/data";
 import { recalculateFromLineItems } from "@/lib/pricing";
+import { PLAN_LIMITS } from "@/lib/plans";
 import { DEFAULT_RATES } from "@/lib/types";
 import type { AiDataJson, AiLineItem, Certification, Company, CompanyRates, MaterialStatus, Quote, QuoteStatus, UserRole } from "@/lib/types";
 
@@ -25,6 +26,13 @@ export async function emailQuoteToClient(quoteId: string) {
     .eq("id", quoteId)
     .single<Quote>();
   if (error || !quote) throw new Error(error?.message || "Quote not found");
+
+  // Defense in depth alongside the disabled button in QuoteDetailActions — a free bid
+  // is watermarked and not for sending, and that has to hold even if this action is
+  // called directly rather than through the UI.
+  if (quote.is_free_bid) {
+    throw new Error("Free bids can't be sent to clients — upgrade to Starter or Pro to send this quote.");
+  }
 
   const { data: company } = await supabase
     .from("companies")
@@ -127,6 +135,13 @@ export async function inviteTeamMember(email: string, role: UserRole) {
   const { profile, company } = await getCompanyContext();
   if (!company || !profile) throw new Error("No company on file");
   if (profile.role !== "admin") throw new Error("Only admins can invite team members");
+
+  // Crew seats are a Pro-only feature (see lib/plans.ts) — enforced here too, not just
+  // in the Team tab's UI, since a server action is directly callable regardless of what
+  // the client renders.
+  if (!PLAN_LIMITS[company.plan].crewSeats) {
+    throw new Error("Inviting teammates is a Pro feature — upgrade to Pro to add crew seats.");
+  }
 
   if (!process.env.SUPABASE_SERVICE_ROLE) {
     throw new Error("Team invites require SUPABASE_SERVICE_ROLE to be set on the server.");

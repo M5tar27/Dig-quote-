@@ -39,16 +39,32 @@ Built for foremen with work gloves on: huge buttons, dead-simple flow, mobile-fi
 
 ## 3. Stripe setup
 
-1. Create a product **DigQuote** with a recurring price of **$99.00/month**. Copy the **Price ID** (`price_...`).
-2. Create a webhook endpoint pointing at `https://<your-domain>/api/stripe/webhook` listening for:
+1. Create a product **DigQuote Starter** with a recurring price of **$49.00/month**. Copy its **Price ID** (`price_...`) into `STRIPE_STARTER_PRICE_ID`.
+2. Create a second product **DigQuote Pro** with a recurring price of **$149.00/month**. Copy its **Price ID** into `STRIPE_PRO_PRICE_ID`.
+3. Copy your **Publishable key** (`pk_...`) into `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — the card-on-file form (Stripe Elements) needs it client-side.
+4. Create a webhook endpoint pointing at `https://<your-domain>/api/stripe/webhook` listening for:
    - `customer.subscription.created`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `invoice.payment_failed`
-3. Copy the webhook **Signing secret** (`whsec_...`).
-4. For local testing, use the Stripe CLI: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
+5. Copy the webhook **Signing secret** (`whsec_...`).
+6. For local testing, use the Stripe CLI: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
 
-Every company gets a 14-day trial (`companies.trial_ends_at`) the moment they sign up — this is enforced independently of Stripe, and mirrored into the Checkout session's `trial_end` so Stripe doesn't charge until the same date. Middleware blocks `/quotes/new` once the trial has expired and there's no active subscription, redirecting to `/pricing`.
+There's no trial. Every company starts on the **Free** plan (`companies.plan = 'free'`): one AI-generated bid, ever, gated behind phone verification (see §3b) and a card on file (collected via a Stripe SetupIntent — never charged for the free bid itself). Upgrading to Starter or Pro is a normal Checkout session; `/api/stripe/webhook` maps the subscription's price id back to a plan via `lib/plans.ts`'s `planForStripePriceId()` and updates `companies.plan`. Canceling drops a company back to `free`. `/api/stripe/portal` opens Stripe's hosted Billing Portal so a Starter/Pro customer can cancel or change plans themselves — no admin work needed on your end.
+
+---
+
+## 3b. Twilio setup (free-bid phone verification)
+
+The free plan's "one bid per business" limit is enforced by phone number, not email — email verification alone wouldn't stop someone from claiming a dozen free bids with a dozen inboxes. This needs a [Twilio](https://www.twilio.com) account with Verify enabled:
+
+1. Create a **Verify Service** in the Twilio console. Copy its SID (`VA...`) into `TWILIO_VERIFY_SERVICE_SID`.
+2. Copy your account's **Account SID** and **Auth Token** into `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`.
+3. Generate a random secret (`openssl rand -hex 32`) for `PHONE_HASH_SECRET` — phone numbers are HMAC-hashed with this before being stored, so the app never keeps a plaintext or reversibly-hashed phone number at rest.
+
+Twilio Lookup (included with the same credentials) also flags VOIP numbers, which are blocked from the free bid since they're trivial to generate in bulk.
+
+If these four env vars aren't all set, `isTwilioConfigured()` returns false and the free-plan phone-verification step can't be completed — free-plan signups won't be able to generate their one bid until it's configured. Starter and Pro accounts are unaffected either way.
 
 ---
 
@@ -71,13 +87,19 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
-STRIPE_PRICE_ID=
+STRIPE_STARTER_PRICE_ID=
+STRIPE_PRO_PRICE_ID=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_VERIFY_SERVICE_SID=
+PHONE_HASH_SECRET=
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-The app needs these to function — without them, Supabase-dependent pages (everything except the marketing homepage) will show an error until configured.
+The app needs the Supabase/OpenAI/Resend values to function at all — without them, Supabase-dependent pages (everything except the marketing homepage) will show an error until configured. The Stripe and Twilio values are needed for the Free plan's card-on-file step, phone verification, and any paid upgrade; see §3 and §3b above.
 
 ---
 
@@ -151,7 +173,9 @@ If GPT-4o fails, or returns confidence below 6/10, the quote is flagged `manual_
 Stats cards (Total Quotes, Win Rate %, Pipeline $), a filterable table (status, date range), and one-tap Mark Won / Mark Lost actions.
 
 ### Billing
-`/pricing` starts a Stripe Checkout session (`/api/stripe/checkout`) for the $99/mo price, honoring whatever's left of the company's 14-day trial. `/api/stripe/webhook` keeps `companies.subscription_status` in sync. Middleware blocks quote creation once the trial's over and there's no active subscription.
+Three plans, no trial: **Free** ($0 — one bid, ever, phone-verified, card on file, watermarked draft PDF, can't be sent to a client), **Starter** ($49/mo — 30 bids/month, clean PDFs, send-to-client), **Pro** ($149/mo — unlimited bids, crew seats). `/pricing` starts a Stripe Checkout session (`/api/stripe/checkout`) for whichever plan the user picks; `/api/stripe/webhook` keeps `companies.plan` and `subscription_status` in sync from the subscription's price id (`lib/plans.ts`). Middleware re-checks plan + usage on every request — free blocks after the one bid, Starter blocks past 30 bids/month, both redirect to `/pricing`. `/api/stripe/portal` opens Stripe's Billing Portal so Starter/Pro customers can cancel or swap plans themselves.
+
+The free bid itself is gated by `components/phone-gate.tsx` (Twilio Verify SMS code, VOIP numbers blocked via Twilio Lookup) and `components/card-on-file.tsx` (a Stripe SetupIntent that stores a card without charging it). `/api/estimate` re-checks plan, phone verification, and card-on-file server-side before generating a free bid — it never trusts the client's claim — and also perceptual-hashes (`lib/phash.ts`) each uploaded photo to block the same photos being reused across a different phone/company within 30 days. A free bid is watermarked, held behind a 5-minute reveal delay (`components/free-bid-reveal.tsx`), and can't be emailed to a client (`app/actions.ts` blocks it server-side too) — upgrading to Starter or Pro removes all three restrictions.
 
 ### Settings (`/settings`)
 Company info + logo, pricing rates (feeds the pricing engine above), and team management — invite crew as **Admin** or **Estimator** (Supabase `auth.admin.inviteUserByEmail`, service-role only). Estimators don't see the Billing tab.

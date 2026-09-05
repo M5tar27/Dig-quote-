@@ -5,7 +5,12 @@ export function isSupabaseConfigured(): boolean {
 }
 
 export function isStripeConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID);
+  return Boolean(
+    process.env.STRIPE_SECRET_KEY &&
+      process.env.STRIPE_STARTER_PRICE_ID &&
+      process.env.STRIPE_PRO_PRICE_ID &&
+      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  );
 }
 
 export function isOpenAiConfigured(): boolean {
@@ -14,6 +19,21 @@ export function isOpenAiConfigured(): boolean {
 
 export function isResendConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY);
+}
+
+/**
+ * Twilio Verify (SMS code) + Lookup (VOIP detection) gate the Free plan's one bid to
+ * one real phone number per business. Without all four, the free-bid phone-verification
+ * step can't be completed — see components/phone-gate.tsx and lib/phone.ts — but the
+ * rest of the app (including Starter/Pro) works fine regardless.
+ */
+export function isTwilioConfigured(): boolean {
+  return Boolean(
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_VERIFY_SERVICE_SID &&
+      process.env.PHONE_HASH_SECRET
+  );
 }
 
 /**

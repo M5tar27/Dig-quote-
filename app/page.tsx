@@ -19,7 +19,7 @@ export default function LandingPage() {
               </Button>
             </Link>
             <Link href="/signup">
-              <Button size="sm">Start free trial</Button>
+              <Button size="sm">First bid free</Button>
             </Link>
           </div>
         </div>
@@ -39,7 +39,7 @@ export default function LandingPage() {
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link href="/signup" className="w-full sm:w-auto">
               <Button size="lg" className="w-full sm:w-auto">
-                Start your 14-day free trial
+                Text a job pic — first bid free
               </Button>
             </Link>
             <Link href="/pricing" className="w-full sm:w-auto">
@@ -49,7 +49,8 @@ export default function LandingPage() {
             </Link>
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            No credit card required for the trial. $99/mo unlimited quotes after.
+            First bid free — one per phone number, card on file, not charged. $49/mo for 30
+            bids, $149/mo unlimited after that.
           </p>
         </div>
       </section>

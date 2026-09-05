@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { estimateFromPhotos } from "@/lib/openai";
 import { calculatePricing } from "@/lib/pricing";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { isTwilioConfigured } from "@/lib/config";
+import { checkFreeBidEligibility, markFreeBidUsed } from "@/lib/phone";
+import { computeImagePhashFromUrl, findNearDuplicatePhoto, recordPhotoHash } from "@/lib/phash";
 import { DEFAULT_RATES, type AiDataJson, type CompanyRates } from "@/lib/types";
 
 const CONFIDENCE_THRESHOLD = 6;
@@ -46,6 +49,8 @@ export async function POST(req: Request) {
     job_type?: string;
     notes?: string;
     company_rates?: Partial<CompanyRates>;
+    is_free_bid?: boolean;
+    phone_hash?: string;
   };
 
   try {
@@ -58,6 +63,46 @@ export async function POST(req: Request) {
 
   if (!quote_id || !photos_urls || photos_urls.length < 3) {
     return NextResponse.json({ error: "quote_id and at least 3 photos_urls are required" }, { status: 400 });
+  }
+
+  // Never trust the client's claim about plan/free-bid status — re-fetch server-side.
+  const { data: companyRow } = await supabase
+    .from("companies")
+    .select("plan, free_bid_card_on_file")
+    .eq("id", profile.company_id)
+    .maybeSingle();
+
+  const isFreeBid = companyRow?.plan === "free" && Boolean(body.is_free_bid);
+  let photoHashes: string[] = [];
+
+  if (isFreeBid) {
+    if (!isTwilioConfigured()) {
+      return NextResponse.json({ error: "Free-bid phone verification isn't configured yet." }, { status: 503 });
+    }
+    if (!body.phone_hash) {
+      return NextResponse.json({ error: "Phone verification is required for the free bid." }, { status: 400 });
+    }
+    if (!companyRow?.free_bid_card_on_file) {
+      return NextResponse.json({ error: "A card on file is required for the free bid." }, { status: 400 });
+    }
+
+    const eligibility = await checkFreeBidEligibility(body.phone_hash);
+    if (!eligibility.eligible) {
+      return NextResponse.json({ error: eligibility.reason || "Not eligible for the free bid." }, { status: 403 });
+    }
+
+    // Perceptual-hash every photo once — reused below both for the dedup check and
+    // for recording, so we don't fetch/hash each image twice.
+    photoHashes = await Promise.all(photos_urls.map((url) => computeImagePhashFromUrl(url)));
+    for (const phash of photoHashes) {
+      const isDuplicate = await findNearDuplicatePhoto(phash, profile.company_id);
+      if (isDuplicate) {
+        return NextResponse.json(
+          { error: "These photos have already been used for a free bid on another account." },
+          { status: 403 }
+        );
+      }
+    }
   }
 
   const rates: CompanyRates = { ...DEFAULT_RATES, ...(body.company_rates || {}) };
@@ -92,16 +137,30 @@ export async function POST(req: Request) {
     }
   }
 
+  const freeRevealAt = isFreeBid ? new Date(Date.now() + 5 * 60_000).toISOString() : null;
+
   const { error: updateError } = await supabase
     .from("quotes")
     .update({
       ai_data_json: data,
       total: data.manual_mode && !estimate ? null : data.total,
+      ...(isFreeBid ? { is_free_bid: true, free_reveal_at: freeRevealAt } : {}),
     })
     .eq("id", quote_id);
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // Only mark the phone/photos as "used" once the quote row itself is confirmed
+  // saved — a mid-failure above shouldn't burn the free bid.
+  if (isFreeBid && body.phone_hash) {
+    await markFreeBidUsed(body.phone_hash, quote_id);
+    await Promise.all(
+      photoHashes.map((phash) => recordPhotoHash(phash, quote_id, profile.company_id))
+    ).catch(() => {
+      // Best-effort — a failed hash record shouldn't fail the whole request.
+    });
   }
 
   return NextResponse.json({

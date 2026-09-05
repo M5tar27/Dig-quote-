@@ -104,7 +104,7 @@ export function LoginForm() {
           <p className="text-center text-sm text-muted-foreground">
             No account?{" "}
             <Link href="/signup" className="font-semibold text-primary">
-              Start your free trial
+              Get your first bid free
             </Link>
           </p>
         </CardContent>
