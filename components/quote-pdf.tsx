@@ -55,13 +55,31 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     textAlign: "center",
   },
+  fieldNotesBox: {
+    marginTop: 14,
+    padding: 8,
+    backgroundColor: "#fafafa",
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+  },
+  fieldNotesText: { fontSize: 8.5, color: "#444", fontStyle: "italic", lineHeight: 1.4 },
 });
 
 function money(n: number | null | undefined) {
   return `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function QuotePdf({ quote, company }: { quote: Quote; company: Company }) {
+export function QuotePdf({
+  quote,
+  company,
+  voiceTranscript,
+}: {
+  quote: Quote;
+  company: Company;
+  /** Set when this quote was built via the Voice Memo feature — see lib/voice.ts. */
+  voiceTranscript?: string | null;
+}) {
   const ai = quote.ai_data_json as AiDataJson | null;
   const lineItems = ai?.line_items ?? [];
   const activeCerts = (company.certifications || []).filter(
@@ -175,6 +193,15 @@ export function QuotePdf({ quote, company }: { quote: Quote; company: Company })
           <View style={{ marginTop: 10 }}>
             <Text style={styles.sectionTitle}>Terms</Text>
             <Text style={{ color: "#666" }}>{company.default_terms}</Text>
+          </View>
+        ) : null}
+
+        {voiceTranscript ? (
+          <View style={styles.fieldNotesBox}>
+            <Text style={{ fontSize: 8.5, fontWeight: 700, color: "#666", marginBottom: 3 }}>
+              FIELD NOTES (recorded on-site)
+            </Text>
+            <Text style={styles.fieldNotesText}>&ldquo;{voiceTranscript}&rdquo;</Text>
           </View>
         ) : null}
 

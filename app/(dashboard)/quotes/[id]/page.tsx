@@ -4,6 +4,7 @@ import { getCompanyContext } from "@/lib/data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QuoteDetailActions } from "@/components/quote-detail-actions";
+import { VoiceBidButton } from "@/components/voice-bid-button";
 import { ManualEstimateForm } from "@/components/manual-estimate-form";
 import { QuoteLineItems } from "@/components/quote-line-items";
 import { JobMaterialsChecklist } from "@/components/job-materials-checklist";
@@ -47,6 +48,34 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     materials = (data as JobMaterial[]) || [];
   }
 
+  // Voice Memo feature (Pro): this job's Form Vault — crew notes recorded by voice,
+  // kept append-only for liability protection (see supabase/schema.sql).
+  let crewNotes: { id: string; transcript: string | null; audio_url: string; created_at: string }[] = [];
+  let changeOrders: {
+    id: string;
+    description: string;
+    price: number | null;
+    public_token: string;
+    signed_at: string | null;
+    created_at: string;
+  }[] = [];
+  if (company.plan === "pro") {
+    const [{ data: notes }, { data: orders }] = await Promise.all([
+      supabase
+        .from("crew_notes")
+        .select("id, transcript, audio_url, created_at")
+        .eq("quote_id", quote.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("change_orders")
+        .select("id, description, price, public_token, signed_at, created_at")
+        .eq("quote_id", quote.id)
+        .order("created_at", { ascending: false }),
+    ]);
+    crewNotes = notes || [];
+    changeOrders = orders || [];
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -80,6 +109,13 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
         hasClientEmail={!!quote.client_email}
         isFreeBid={quote.is_free_bid}
       />
+
+      {company.plan === "pro" && (
+        <div className="rounded-xl border bg-card p-4 text-center">
+          <p className="mb-3 text-sm font-semibold text-muted-foreground">Voice: add a change order or crew note</p>
+          <VoiceBidButton tier={company.plan} companyId={company.id} quoteId={quote.id} />
+        </div>
+      )}
 
       <FreeBidReveal revealAt={quote.free_reveal_at} isFreeBid={quote.is_free_bid}>
         {ai?.manual_mode && (
@@ -121,6 +157,53 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
 
       {quote.status === "won" && (
         <JobMaterialsChecklist quoteId={quote.id} materials={materials} />
+      )}
+
+      {changeOrders.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Change Orders</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {changeOrders.map((co) => (
+              <a
+                key={co.id}
+                href={`/co/${co.public_token}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-between rounded-lg border bg-muted/40 p-3 text-sm hover:bg-muted"
+              >
+                <div>
+                  <p className="line-clamp-1 font-medium">{co.description}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(co.created_at)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-primary">{formatCurrency(co.price || 0)}</p>
+                  <Badge variant={co.signed_at ? "success" : "secondary"} className="mt-1">
+                    {co.signed_at ? "Approved" : "Pending"}
+                  </Badge>
+                </div>
+              </a>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {crewNotes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Form Vault — Crew Notes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {crewNotes.map((note) => (
+              <div key={note.id} className="rounded-lg border bg-muted/40 p-3 text-sm">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">{formatDate(note.created_at)}</p>
+                <p>{note.transcript}</p>
+                <audio controls src={note.audio_url} className="mt-2 h-8 w-full" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
       <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">

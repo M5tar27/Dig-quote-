@@ -39,6 +39,7 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/signup") ||
     path.startsWith("/auth") ||
     path.startsWith("/q/") ||
+    path.startsWith("/co/") ||
     path.startsWith("/pricing") ||
     path === "/" ||
     path.startsWith("/api/stripe/webhook");

@@ -9,6 +9,18 @@ export interface PlanLimit {
   canSend: boolean;
   crewSeats: boolean;
   stripePriceEnvVar?: "STRIPE_STARTER_PRICE_ID" | "STRIPE_PRO_PRICE_ID";
+  /** Voice Memo feature — talk a bid instead of typing it. See lib/voice.ts. */
+  voice: {
+    enabled: boolean;
+    /** Voice-to-bid uses allowed per month. `null` = unlimited. 0 on Free — the
+     * mic button is still visible there, just always upsells (never actually
+     * counted/used, per the anti-abuse pivot's "show speed, force typing pain"
+     * framing for the free tier). */
+    bidsPerMonth: number | null;
+    /** Pro-only: "Add Change Order" and "Crew Note" voice types. */
+    changeOrders: boolean;
+    crewNotes: boolean;
+  };
 }
 
 /**
@@ -25,6 +37,7 @@ export const PLAN_LIMITS: Record<CompanyPlan, PlanLimit> = {
     cleanPdf: false,
     canSend: false,
     crewSeats: false,
+    voice: { enabled: false, bidsPerMonth: 0, changeOrders: false, crewNotes: false },
   },
   starter: {
     label: "Starter",
@@ -34,6 +47,7 @@ export const PLAN_LIMITS: Record<CompanyPlan, PlanLimit> = {
     canSend: true,
     crewSeats: false,
     stripePriceEnvVar: "STRIPE_STARTER_PRICE_ID",
+    voice: { enabled: true, bidsPerMonth: 30, changeOrders: false, crewNotes: false },
   },
   pro: {
     label: "Pro",
@@ -43,6 +57,7 @@ export const PLAN_LIMITS: Record<CompanyPlan, PlanLimit> = {
     canSend: true,
     crewSeats: true,
     stripePriceEnvVar: "STRIPE_PRO_PRICE_ID",
+    voice: { enabled: true, bidsPerMonth: null, changeOrders: true, crewNotes: true },
   },
 };
 

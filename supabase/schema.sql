@@ -386,3 +386,148 @@ as $$
 $$;
 
 grant execute on function approve_public_quote(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Voice Memo feature (New Bid / Change Order / Crew Note by voice).
+-- Free = 0 voice attempts (button visible, always upsells). Starter = 30
+-- voice bids per rolling calendar month (see lib/voice.ts's checkVoiceEligibility
+-- — there's no stored Stripe billing-period boundary yet, so "per month" is
+-- approximated as "since the 1st of the current UTC month," same simplification
+-- as everywhere else in this schema that doesn't yet track period_start/end).
+-- Pro = unlimited voice bids + Change Order and Crew Note voice types.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  create type voice_memo_type as enum ('bid', 'change_order', 'crew_note');
+exception
+  when duplicate_object then null;
+end $$;
+
+-- One row per completed (transcribed + parsed) voice memo, regardless of type.
+-- Counting rows here (type='bid', created_at >= start of month) is how the
+-- Starter 30/mo voice cap is enforced — mirrors api_usage_events' "insert one
+-- row per successful call, count rows" pattern rather than a separate counter
+-- column, so it can't drift out of sync with what actually happened.
+create table if not exists voice_memos (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies (id) on delete cascade,
+  created_by uuid not null references auth.users (id),
+  quote_id uuid references quotes (id) on delete set null,
+  type voice_memo_type not null default 'bid',
+  audio_url text not null,
+  transcript text,
+  -- {length, width, depth_inches, soil_type, access_ft, haul_ft, loads,
+  --  address, customer_name, timeline, extra_notes} — see lib/openai.ts's
+  -- parseVoiceTranscript. Nullable fields the parser couldn't extract are
+  -- surfaced back to the contractor to fill in by hand (missed-field prompt).
+  parsed_fields jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists voice_memos_company_type_created_idx
+  on voice_memos (company_id, type, created_at);
+alter table voice_memos enable row level security;
+
+drop policy if exists "voice_memos_select_company" on voice_memos;
+create policy "voice_memos_select_company" on voice_memos
+  for select using (company_id = current_company_id());
+
+drop policy if exists "voice_memos_insert_company" on voice_memos;
+create policy "voice_memos_insert_company" on voice_memos
+  for insert with check (company_id = current_company_id() and created_by = auth.uid());
+
+-- Pro-only: "Add Change Order" voice type. Gets its own public_token (same
+-- pattern as quotes) so a customer can view + sign it from an unauthenticated
+-- link without seeing anything else in the account.
+create table if not exists change_orders (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies (id) on delete cascade,
+  created_by uuid not null references auth.users (id),
+  quote_id uuid references quotes (id) on delete set null,
+  voice_memo_id uuid references voice_memos (id) on delete set null,
+  description text not null default '',
+  price numeric(10, 2),
+  pdf_url text,
+  customer_name text,
+  public_token text not null default encode(gen_random_bytes(16), 'hex'),
+  signed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists change_orders_public_token_idx on change_orders (public_token);
+create index if not exists change_orders_company_id_idx on change_orders (company_id);
+alter table change_orders enable row level security;
+
+drop policy if exists "change_orders_select_company" on change_orders;
+create policy "change_orders_select_company" on change_orders
+  for select using (company_id = current_company_id());
+
+drop policy if exists "change_orders_insert_company" on change_orders;
+create policy "change_orders_insert_company" on change_orders
+  for insert with check (company_id = current_company_id() and created_by = auth.uid());
+
+-- Signing happens from the public (unauthenticated) page via a security-definer
+-- function, same shape as approve_public_quote below.
+create or replace function sign_public_change_order(p_token text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update change_orders set signed_at = now() where public_token = p_token and signed_at is null;
+$$;
+
+grant execute on function sign_public_change_order(text) to anon, authenticated;
+
+create or replace function get_public_change_order(p_token text)
+returns table (
+  id uuid,
+  description text,
+  price numeric,
+  pdf_url text,
+  customer_name text,
+  signed_at timestamptz,
+  created_at timestamptz,
+  company_name text,
+  company_phone text
+)
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select
+    co.id, co.description, co.price, co.pdf_url, co.customer_name, co.signed_at, co.created_at,
+    c.name, c.phone
+  from change_orders co
+  join companies c on c.id = co.company_id
+  where co.public_token = p_token;
+$$;
+
+grant execute on function get_public_change_order(text) to anon, authenticated;
+
+-- Pro-only: "Crew Note" voice type — a timestamped, append-only field log for
+-- liability protection (e.g. "customer added scope on-site," "hit unexpected
+-- rock at 2pm"). Deliberately has NO update/delete policy anywhere in this
+-- schema — once created, a crew note can't be edited or removed by anyone
+-- through the app, which is the point of keeping it as a liability record.
+create table if not exists crew_notes (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies (id) on delete cascade,
+  created_by uuid not null references auth.users (id),
+  quote_id uuid references quotes (id) on delete set null,
+  voice_memo_id uuid references voice_memos (id) on delete set null,
+  audio_url text not null,
+  transcript text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists crew_notes_company_id_idx on crew_notes (company_id, created_at);
+alter table crew_notes enable row level security;
+
+drop policy if exists "crew_notes_select_company" on crew_notes;
+create policy "crew_notes_select_company" on crew_notes
+  for select using (company_id = current_company_id());
+
+drop policy if exists "crew_notes_insert_company" on crew_notes;
+create policy "crew_notes_insert_company" on crew_notes
+  for insert with check (company_id = current_company_id() and created_by = auth.uid());
