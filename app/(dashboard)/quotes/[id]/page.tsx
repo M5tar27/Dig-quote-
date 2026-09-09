@@ -48,6 +48,16 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     materials = (data as JobMaterial[]) || [];
   }
 
+  // Was this quote's pricing built from a spoken bid? (Starter+ — not Pro-gated.)
+  // Drives the ManualEstimateForm copy below so it doesn't claim "AI couldn't read
+  // photos" for a quote that never had photos in the first place.
+  const { data: voiceMemoBid } = await supabase
+    .from("voice_memos")
+    .select("id")
+    .eq("quote_id", quote.id)
+    .eq("type", "bid")
+    .maybeSingle();
+
   // Voice Memo feature (Pro): this job's Form Vault — crew notes recorded by voice,
   // kept append-only for liability protection (see supabase/schema.sql).
   let crewNotes: { id: string; transcript: string | null; audio_url: string; created_at: string }[] = [];
@@ -119,7 +129,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
 
       <FreeBidReveal revealAt={quote.free_reveal_at} isFreeBid={quote.is_free_bid}>
         {ai?.manual_mode && (
-          <ManualEstimateForm quoteId={quote.id} rates={rates} />
+          <ManualEstimateForm quoteId={quote.id} rates={rates} source={voiceMemoBid ? "voice" : "photo"} />
         )}
 
         {ai && !ai.manual_mode && (

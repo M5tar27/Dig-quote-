@@ -10,7 +10,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Loader2 } from "lucide-react";
 import type { CompanyRates } from "@/lib/types";
 
-export function ManualEstimateForm({ quoteId, rates }: { quoteId: string; rates: CompanyRates }) {
+export function ManualEstimateForm({
+  quoteId,
+  rates,
+  source = "photo",
+}: {
+  quoteId: string;
+  rates: CompanyRates;
+  source?: "photo" | "voice";
+}) {
   const router = useRouter();
   const [sqft, setSqft] = useState("");
   const [depth, setDepth] = useState("");
@@ -50,9 +58,13 @@ export function ManualEstimateForm({ quoteId, rates }: { quoteId: string; rates:
   return (
     <Card className="border-primary/40 bg-primary/5">
       <CardHeader>
-        <CardTitle className="text-lg">AI couldn't read photos. Enter sqft manually</CardTitle>
+        <CardTitle className="text-lg">
+          {source === "voice" ? "From your voice memo — confirm the numbers" : "AI couldn't read photos. Enter sqft manually"}
+        </CardTitle>
         <CardDescription>
-          We'll calculate materials, labor, and pricing from these two numbers instead.
+          {source === "voice"
+            ? "Your pricing below came from what you said. Enter square footage and depth here if you'd like to recalculate it."
+            : "We'll calculate materials, labor, and pricing from these two numbers instead."}
         </CardDescription>
       </CardHeader>
       <CardContent>
