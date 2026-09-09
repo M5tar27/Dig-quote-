@@ -11,6 +11,8 @@ export type QuoteStatus = "draft" | "sent" | "won" | "lost";
 
 export type UserRole = "admin" | "estimator";
 
+export type CompanyPlan = "free" | "starter" | "pro";
+
 export interface CompanyRates {
   excavator_hr: number;
   labor_hr: number;
@@ -53,6 +55,8 @@ export interface Company {
   stripe_subscription_id: string | null;
   subscription_status: "trialing" | "active" | "past_due" | "canceled" | "none";
   trial_ends_at: string | null;
+  plan: CompanyPlan;
+  free_bid_card_on_file: boolean;
   rates_json: CompanyRates;
   certifications: Certification[];
   created_at: string;
@@ -135,6 +139,8 @@ export interface Quote {
   total: number | null;
   pdf_url: string | null;
   public_token: string;
+  is_free_bid: boolean;
+  free_reveal_at: string | null;
   created_at: string;
   updated_at: string;
 }

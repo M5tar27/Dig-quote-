@@ -57,8 +57,11 @@ export function SignupForm() {
     <main className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Start your 14-day free trial</CardTitle>
-          <CardDescription>No credit card required</CardDescription>
+          <CardTitle className="text-2xl">Get your first bid free</CardTitle>
+          <CardDescription>
+            No card needed to sign up — you'll verify your phone and add a card (never
+            charged) right before your free bid.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Button

@@ -10,19 +10,24 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, UserPlus } from "lucide-react";
-import type { Profile, UserRole } from "@/lib/types";
+import Link from "next/link";
+import { Loader2, UserPlus, Lock } from "lucide-react";
+import { PLAN_LIMITS } from "@/lib/plans";
+import type { CompanyPlan, Profile, UserRole } from "@/lib/types";
 
 export function TeamPanel({
   members,
   isAdmin,
   currentUserId,
+  plan,
 }: {
   members: Profile[];
   isAdmin: boolean;
   currentUserId: string;
+  plan: CompanyPlan;
 }) {
   const router = useRouter();
+  const canInvite = PLAN_LIMITS[plan].crewSeats;
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("estimator");
   const [inviting, setInviting] = useState(false);
@@ -60,7 +65,19 @@ export function TeamPanel({
         <CardDescription>Admins see billing and pricing. Estimators can only create and manage quotes.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {isAdmin && (
+        {isAdmin && !canInvite && (
+          <div className="flex items-center gap-3 rounded-lg border border-dashed p-4 text-sm">
+            <Lock className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              Crew seats are a Pro feature.{" "}
+              <Link href="/pricing" className="font-medium text-primary underline">
+                Upgrade to Pro
+              </Link>{" "}
+              to invite teammates.
+            </p>
+          </div>
+        )}
+        {isAdmin && canInvite && (
           <form onSubmit={handleInvite} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-2">
               <Label htmlFor="inviteEmail">Invite by email</Label>

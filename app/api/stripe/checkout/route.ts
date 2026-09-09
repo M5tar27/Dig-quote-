@@ -3,14 +3,28 @@ import { stripe } from "@/lib/stripe";
 import { getCompanyContext } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 
-export async function POST() {
+const PRICE_ENV_VARS = {
+  starter: "STRIPE_STARTER_PRICE_ID",
+  pro: "STRIPE_PRO_PRICE_ID",
+} as const;
+
+export async function POST(req: Request) {
   try {
     const { user, company } = await getCompanyContext();
     if (!user || !company) {
       return NextResponse.json({ error: "Not signed in" }, { status: 401 });
     }
 
-    if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_PRICE_ID) {
+    let body: { plan?: "starter" | "pro" } = {};
+    try {
+      body = await req.json();
+    } catch {
+      // No body is fine — defaults to starter below.
+    }
+    const plan = body.plan === "pro" ? "pro" : "starter";
+    const priceId = process.env[PRICE_ENV_VARS[plan]];
+
+    if (!process.env.STRIPE_SECRET_KEY || !priceId) {
       return NextResponse.json(
         { error: "Billing isn't configured yet (missing Stripe secret key or price ID)." },
         { status: 500 }
@@ -31,18 +45,13 @@ export async function POST() {
       await supabase.from("companies").update({ stripe_customer_id: customerId }).eq("id", company.id);
     }
 
-    const trialEndsAt = company.trial_ends_at ? new Date(company.trial_ends_at) : null;
-    const trialStillActive = trialEndsAt && trialEndsAt.getTime() > Date.now();
-
+    // No trials anymore — see supabase/schema.sql's free-bid relaunch migration.
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
         metadata: { company_id: company.id },
-        ...(trialStillActive
-          ? { trial_end: Math.floor((trialEndsAt as Date).getTime() / 1000) }
-          : {}),
       },
       metadata: { company_id: company.id },
       success_url: `${appUrl}/app?checkout=success`,

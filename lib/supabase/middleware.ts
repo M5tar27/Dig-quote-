@@ -39,6 +39,7 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/signup") ||
     path.startsWith("/auth") ||
     path.startsWith("/q/") ||
+    path.startsWith("/co/") ||
     path.startsWith("/pricing") ||
     path === "/" ||
     path.startsWith("/api/stripe/webhook");
@@ -49,7 +50,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Paywall: block new-quote creation once the trial has expired and there's no active sub.
+  // Paywall: no more trial — gate purely on plan + usage. See supabase/schema.sql's
+  // free-bid relaunch migration and lib/plans.ts's PLAN_LIMITS.
   if (user && path.startsWith("/quotes/new")) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -60,20 +62,44 @@ export async function updateSession(request: NextRequest) {
     if (profile?.company_id) {
       const { data: company } = await supabase
         .from("companies")
-        .select("subscription_status, trial_ends_at")
+        .select("plan, subscription_status")
         .eq("id", profile.company_id)
         .maybeSingle();
 
-      const trialExpired =
-        company?.trial_ends_at && new Date(company.trial_ends_at) < new Date();
-      const hasActiveSub =
-        company?.subscription_status === "active" || company?.subscription_status === "trialing";
+      if (company) {
+        let blocked = false;
 
-      if (company && trialExpired && !hasActiveSub) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/pricing";
-        url.searchParams.set("paywall", "1");
-        return NextResponse.redirect(url);
+        if (company.plan === "free") {
+          const { count } = await supabase
+            .from("quotes")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", profile.company_id)
+            .eq("is_free_bid", true);
+          blocked = (count ?? 0) >= 1;
+        } else if (company.plan === "starter") {
+          if (company.subscription_status !== "active") {
+            blocked = true;
+          } else {
+            const monthStart = new Date();
+            monthStart.setUTCDate(1);
+            monthStart.setUTCHours(0, 0, 0, 0);
+            const { count } = await supabase
+              .from("quotes")
+              .select("id", { count: "exact", head: true })
+              .eq("company_id", profile.company_id)
+              .gte("created_at", monthStart.toISOString());
+            blocked = (count ?? 0) >= 30;
+          }
+        } else if (company.plan === "pro") {
+          blocked = company.subscription_status !== "active";
+        }
+
+        if (blocked) {
+          const url = request.nextUrl.clone();
+          url.pathname = "/pricing";
+          url.searchParams.set("paywall", "1");
+          return NextResponse.redirect(url);
+        }
       }
     }
   }

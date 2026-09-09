@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { updateQuoteStatus, emailQuoteToClient } from "@/app/actions";
-import { Download, Mail, Check, X, Link2, Loader2 } from "lucide-react";
+import { Download, Mail, Check, X, Link2, Loader2, Lock } from "lucide-react";
+import Link from "next/link";
 import type { QuoteStatus } from "@/lib/types";
 
 export function QuoteDetailActions({
@@ -13,11 +14,13 @@ export function QuoteDetailActions({
   status,
   publicToken,
   hasClientEmail,
+  isFreeBid,
 }: {
   quoteId: string;
   status: QuoteStatus;
   publicToken: string;
   hasClientEmail: boolean;
+  isFreeBid?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -65,14 +68,25 @@ export function QuoteDetailActions({
           Download PDF
         </Button>
       </a>
-      <Button variant="outline" size="lg" className="gap-2" onClick={handleEmail} disabled={emailing}>
-        {emailing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mail className="h-5 w-5" />}
-        Email to Client
-      </Button>
-      <Button variant="outline" size="lg" className="gap-2" onClick={copyPublicLink}>
-        <Link2 className="h-5 w-5" />
-        Copy Client Link
-      </Button>
+      {isFreeBid ? (
+        <Link href="/pricing">
+          <Button variant="outline" size="lg" className="gap-2">
+            <Lock className="h-5 w-5" />
+            Upgrade to send this quote
+          </Button>
+        </Link>
+      ) : (
+        <>
+          <Button variant="outline" size="lg" className="gap-2" onClick={handleEmail} disabled={emailing}>
+            {emailing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mail className="h-5 w-5" />}
+            Email to Client
+          </Button>
+          <Button variant="outline" size="lg" className="gap-2" onClick={copyPublicLink}>
+            <Link2 className="h-5 w-5" />
+            Copy Client Link
+          </Button>
+        </>
+      )}
       {status !== "won" && (
         <Button variant="success" size="lg" className="gap-2" onClick={() => setStatus("won")} disabled={isPending}>
           <Check className="h-5 w-5" />

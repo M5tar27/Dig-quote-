@@ -26,7 +26,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Company not found" }, { status: 404 });
   }
 
-  await renderAndStoreQuotePdf(supabase, quote, company);
+  // Voice Memo feature: if this quote was built from a voice bid, fold the transcript
+  // into the PDF as "Field Notes" (see lib/voice.ts, app/api/voice/confirm/route.ts).
+  const { data: voiceMemo } = await supabase
+    .from("voice_memos")
+    .select("transcript")
+    .eq("quote_id", quote.id)
+    .eq("type", "bid")
+    .maybeSingle();
+
+  await renderAndStoreQuotePdf(supabase, quote, company, voiceMemo?.transcript ?? null);
 
   // Re-fetch the freshly rendered file so the response reflects exactly what's stored.
   const path = `${company.id}/${quote.id}/quote.pdf`;
